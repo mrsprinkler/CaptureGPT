@@ -1,0 +1,17 @@
+{
+    "version": 1,
+    "answer_box": {
+        "x": 1400.0,
+        "y": 647.0,
+        "width": 510.0,
+        "height": 287.0
+    },
+    "courses": [
+        "AP Computer Science",
+        "AP Environmental Science",
+        "AP Precalculus",
+        "AP Statistics",
+        "Economics",
+        "English 4"
+    ]
+}

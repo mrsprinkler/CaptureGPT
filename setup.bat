@@ -11,6 +11,7 @@ echo Installing dependencies...
 uv sync
 
 echo.
+start "" "https://platform.openai.com/api-keys"
 for /f "delims=" %%K in ('powershell -NoProfile -Command "$s=Read-Host ''Enter your OpenAI API key'' -AsSecureString; [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))"') do set "OPENAI_API_KEY=%%K"
 
 > .env echo OPENAI_API_KEY=%OPENAI_API_KEY%

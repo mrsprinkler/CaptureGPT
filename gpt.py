@@ -46,15 +46,23 @@ def get_test_info(title):
     response = client.responses.create(
     model="gpt-5.4-nano",
     reasoning={"effort": "none"},
-    input=f"""Extract from this test title.
+    input=f"""Extract Course, Test Name, and Short Test Name.
 
 Title: {title}
 Courses: {courses}
 
-Course = course name, using the course list as context.
-Test name = full test/assignment name, excluding the course.
-Short test name = a few identifying words from the test name. Never include verbs like Evaluate in the short test name.
-Do not include unit names/numbers in Course.""",
+Course: Match the course list. Return only the course name. Exclude unit/lesson numbers, semester, and year.
+
+Test Name: Return ONLY the actual test/assignment name. Remove the course, unit/lesson labels, semester/year, and browser/app name.
+
+Short Test Name: 2-5 identifying words from the test name. Do not use verbs like Evaluate, Analyze, or Calculate.
+
+Example:
+"03 Evaluate: Week 3 Graded Assignment: Ap Statistics Sem A-Semester 1-2026/2027 — Mozilla Firefox"
+→ Course: "AP Statistics"
+→ Test Name: "Week 3 Graded Assignment"
+→ Short Test Name: "Week 3 Graded Assignment"
+""",
     text={
         "format": {
             "type": "json_schema",
@@ -100,7 +108,7 @@ def answer(ocr_results, title=None, image=None, effort="xhigh"):
 
 def _answer_request(ocr_results, image=None, effort="xhigh"):
     started_at = time.perf_counter()
-    # return {"answers":[], "response":"""## Question 1: **A**. W\n## Question 2: **B**. X\n## Question 3: **B**. X"""}
+    return {"answers":[], "response":"""## Question 1: **A**. W\n## Question 2: **B**. X\n## Question 3: **B**. X"""}
 
     ocr_results = [
         {

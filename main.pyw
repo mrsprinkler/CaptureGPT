@@ -228,7 +228,39 @@ def set_answer(txt):
         effort_colors[efforts[effort_index]]
     )
 
-title_cache = {}
+def load_title_cache():
+    if not SETTINGS_FILE.exists():
+        return {}
+
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+
+        return settings.get("title_cache", {})
+
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Failed to load title cache: {e}")
+        return {}
+
+def save_title_cache(title_cache):
+    try:
+        if SETTINGS_FILE.exists():
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        else:
+            settings = {}
+
+        settings["title_cache"] = title_cache
+
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=4, ensure_ascii=False)
+
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Failed to save title cache: {e}")
+
+
+title_cache = load_title_cache()
+
 
 def background_worker():
     """
@@ -300,6 +332,7 @@ def background_worker():
             if test_info is not None:
                 print("Using cached test info.")
                 title_for_gpt = None
+
             else:
                 print("No cached test info. Extracting title...")
                 title_for_gpt = title
@@ -340,8 +373,11 @@ def background_worker():
                 test_info = response.get("test_info")
 
                 if test_info is not None and title is not None:
+
                     title_cache[title] = test_info
-                    print("Test info cached.")
+                    save_title_cache(title_cache)
+
+                    print("Test info cached and saved.")
 
             response["test_info"] = test_info
 

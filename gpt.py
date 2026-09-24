@@ -108,7 +108,7 @@ def answer(ocr_results, title=None, image=None, effort="xhigh"):
 
 def _answer_request(ocr_results, image=None, effort="xhigh"):
     started_at = time.perf_counter()
-    return {"answers":[], "response":"""## Question 1: **A**. W\n## Question 2: **B**. X\n## Question 3: **B**. X"""}
+    # return {"answers":[], "response":"""## Question 1: **A**. W\n## Question 2: **B**. X\n## Question 3: **B**. X"""}
 
     ocr_results = [
         {

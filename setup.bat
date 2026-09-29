@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableDelayedExpansion
 
 where uv >nul 2>&1
 if errorlevel 1 (
@@ -10,12 +11,13 @@ if errorlevel 1 (
 echo Installing dependencies...
 uv sync
 
-echo.
-start "" "https://platform.openai.com/api-keys"
-for /f "delims=" %%K in ('powershell -NoProfile -Command "$s=Read-Host ''Enter your OpenAI API key'' -AsSecureString; [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))"') do set "OPENAI_API_KEY=%%K"
+if errorlevel 1 (
+    echo Dependency installation failed.
+    pause
+    exit /b 1
+)
 
-> .env echo OPENAI_API_KEY=%OPENAI_API_KEY%
-
 echo.
-echo API key saved to .env
+echo Dependencies installed. Start CaptureGPT with run.bat; it will ask for an API key if needed.
 pause
+exit /b 0

@@ -3,7 +3,7 @@ import ctypes
 import json
 import markdown
 
-from pathlib import Path
+from app_config import SETTINGS_FILE
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import (
@@ -15,7 +15,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QApplication, QWidget
 
 instructions = """
-**`** — OCR-only screenshot
+**\\`** — OCR-only screenshot
 **Home** — Configuration mode
 **Insert** — Show/hide overlay
 **Escape** — Clear boxes and answer
@@ -29,8 +29,6 @@ starting_instructions = instructions + "\nOnce the application is ready, you may
 # ================================================================
 # Settings
 # ================================================================
-
-SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"
 
 SETTINGS_VERSION = 1
 

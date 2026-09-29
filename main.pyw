@@ -1,3 +1,12 @@
+"""
+"courses": [
+    "AP Computer Science",
+    "AP Environmental Science",
+    "AP Precalculus",
+    "AP Statistics",
+    "Economics",
+    "English 4"
+  ]"""
 print("Starting...")
 
 import window
@@ -22,6 +31,7 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 import io
 import img2pdf
+from app_config import APP_DIR, SETTINGS_FILE, load_settings
 
 def get_window_title():
     excluded = {
@@ -54,25 +64,44 @@ def get_window_title():
 # Screenshot saving
 # ============================================================
 
-SETTINGS_FILE = Path.cwd() / "settings.json"
+SETTINGS = load_settings()
 
-screenshot_folder = Path.cwd() / "Answers"
+OUTPUT_SETTINGS = SETTINGS.get("output", {})
+if not isinstance(OUTPUT_SETTINGS, dict):
+    OUTPUT_SETTINGS = {}
+SAVE_MARKDOWN = OUTPUT_SETTINGS.get("save_markdown", True)
+SAVE_PDF = OUTPUT_SETTINGS.get("save_pdf", True)
+if not isinstance(SAVE_MARKDOWN, bool):
+    SAVE_MARKDOWN = True
+if not isinstance(SAVE_PDF, bool):
+    SAVE_PDF = True
+
+output_directory_value = OUTPUT_SETTINGS.get("directory", "Answers")
+if not isinstance(output_directory_value, str) or not output_directory_value.strip():
+    output_directory_value = "Answers"
+output_directory = Path(output_directory_value)
+if not output_directory.is_absolute():
+    output_directory = APP_DIR / output_directory
+
+screenshot_folder = output_directory
 screenshot_folder.mkdir(parents=True, exist_ok=True)
 
 
 def get_answers_folder():
     folder = screenshot_folder
 
-    with open(SETTINGS_FILE, "r") as f:
-        settings = json.load(f)
+    settings = load_settings()
 
-        if settings.get("answers", {}).get("subdirectory", "").strip():
-            folder = (
-                screenshot_folder
-                / settings["answers"]["subdirectory"]
-            )
+    answers_settings = settings.get("answers", {})
+    subdirectory = (
+        answers_settings.get("subdirectory", "")
+        if isinstance(answers_settings, dict)
+        else ""
+    )
+    if isinstance(subdirectory, str) and subdirectory.strip():
+        folder = screenshot_folder / subdirectory
 
-            folder.mkdir(parents=True, exist_ok=True)
+        folder.mkdir(parents=True, exist_ok=True)
 
     return folder
 
@@ -103,6 +132,113 @@ def add_frame_to_pdf(path: Path | str, frame):
 
     with open(path, "wb") as f:
         writer.write(f)
+
+
+def ensure_openai_api_key():
+    """Load an existing key or prompt the user to copy/type one."""
+    from dotenv import dotenv_values, load_dotenv, set_key
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import (
+        QDialog,
+        QDialogButtonBox,
+        QLabel,
+        QLineEdit,
+        QVBoxLayout,
+    )
+    import webbrowser
+
+    app_dir = (
+        Path(sys.executable).resolve().parent
+        if getattr(sys, "frozen", False)
+        else Path(__file__).resolve().parent
+    )
+    env_file = app_dir / ".env"
+
+    def is_api_key(value):
+        return bool(re.fullmatch(r"sk-[A-Za-z0-9_-]{20,}", value.strip()))
+
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not is_api_key(key) and env_file.exists():
+        key = (dotenv_values(env_file).get("OPENAI_API_KEY") or "").strip()
+
+    if is_api_key(key):
+        os.environ["OPENAI_API_KEY"] = key
+        load_dotenv(env_file, override=False)
+        return
+    key = ""
+
+    clipboard = app.clipboard()
+    key = clipboard.text().strip()
+    if not is_api_key(key):
+        key = ""
+
+    dialog = QDialog()
+    dialog.setWindowTitle("OpenAI API key")
+    dialog.setMinimumWidth(430)
+    layout = QVBoxLayout(dialog)
+    message = QLabel(
+        "Copy an OpenAI API key to save it automatically, or type it below."
+    )
+    message.setWordWrap(True)
+    layout.addWidget(message)
+
+    key_input = QLineEdit()
+    key_input.setEchoMode(QLineEdit.EchoMode.Password)
+    key_input.setPlaceholderText("sk-...")
+    layout.addWidget(key_input)
+
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Save
+        | QDialogButtonBox.StandardButton.Cancel
+    )
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    layout.addWidget(buttons)
+
+    if key:
+        key_input.setText(key)
+        dialog.accept()
+    else:
+        timer = QTimer(dialog)
+
+        def check_clipboard():
+            copied_key = clipboard.text().strip()
+            if is_api_key(copied_key):
+                key_input.setText(copied_key)
+                dialog.accept()
+
+        timer.timeout.connect(check_clipboard)
+        timer.start(300)
+        webbrowser.open("https://platform.openai.com/api-keys")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            sys.exit(0)
+        timer.stop()
+        key = key_input.text().strip()
+
+    if not is_api_key(key):
+        message.setText("That does not look like an API key. Please try again.")
+        key_input.clear()
+        timer = QTimer(dialog)
+
+        def check_clipboard_again():
+            copied_key = clipboard.text().strip()
+            if is_api_key(copied_key):
+                key_input.setText(copied_key)
+                dialog.accept()
+
+        timer.timeout.connect(check_clipboard_again)
+        timer.start(300)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            sys.exit(0)
+        timer.stop()
+        key = key_input.text().strip()
+
+    set_key(str(env_file), "OPENAI_API_KEY", key, quote_mode="always")
+    os.environ["OPENAI_API_KEY"] = key
+
+
+printStatus("Checking OpenAI API key...")
+ensure_openai_api_key()
 
 printStatus("Loading GPT...")
 import gpt
@@ -157,9 +293,49 @@ print("DPR:", dpr)
 
 printStatus("Initializing OCR...")
 
+OCR_SETTINGS = SETTINGS.get("ocr", {})
+if not isinstance(OCR_SETTINGS, dict):
+    OCR_SETTINGS = {}
+
+ocr_language = OCR_SETTINGS.get("language", "en")
+if not isinstance(ocr_language, str) or not ocr_language.strip():
+    ocr_language = "en"
+
+ocr_device = OCR_SETTINGS.get("device", "gpu:0")
+if not isinstance(ocr_device, str) or not ocr_device.strip():
+    ocr_device = "gpu:0"
+
+ocr_min_confidence = OCR_SETTINGS.get("min_confidence", 0.7)
+if not isinstance(ocr_min_confidence, (int, float)) or isinstance(ocr_min_confidence, bool):
+    ocr_min_confidence = 0.7
+ocr_min_confidence = max(0.0, min(1.0, float(ocr_min_confidence)))
+
+ocr_region_gap = OCR_SETTINGS.get("region_gap", 150)
+if not isinstance(ocr_region_gap, int) or isinstance(ocr_region_gap, bool):
+    ocr_region_gap = 150
+
+ocr_region_padding = OCR_SETTINGS.get("region_padding", 20)
+if not isinstance(ocr_region_padding, int) or isinstance(ocr_region_padding, bool):
+    ocr_region_padding = 20
+
+default_ignored_text = {
+    "Home", "IgniteAI Search", "Syllabus", "Modules", "Announcements",
+    "Assignments", "Grades", "Lucid (Whiteboard)", "Notebook", "Account",
+    "Dashboard", "Courses", "Calendar", "Inbox", "History", "Studio", "Help",
+}
+configured_ignored_text = OCR_SETTINGS.get("ignored_text", default_ignored_text)
+if isinstance(configured_ignored_text, list):
+    ignored_text = {
+        text.strip()
+        for text in configured_ignored_text
+        if isinstance(text, str) and text.strip()
+    }
+else:
+    ignored_text = default_ignored_text
+
 ocr = PaddleOCR(
-    lang="en",
-    device="gpu:0",
+    lang=ocr_language,
+    device=ocr_device,
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
     use_textline_orientation=False,
@@ -190,9 +366,7 @@ delete_requested = False
 insert_requested = False
 escape_requested = False
 
-effort_index = 0
-
-efforts = [
+DEFAULT_EFFORTS = [
     "high",
     "xhigh",
     "medium",
@@ -200,13 +374,94 @@ efforts = [
     "max",
 ]
 
-effort_colors = {
-    "low": "#4CAF50",
-    "medium": "#8BC34A",
-    "high": "#FFC107",
-    "xhigh": "#FF9800",
-    "max": "#F44336",
+REASONING_SETTINGS = SETTINGS.get("reasoning", {})
+if not isinstance(REASONING_SETTINGS, dict):
+    REASONING_SETTINGS = {}
+
+configured_efforts = REASONING_SETTINGS.get("efforts", DEFAULT_EFFORTS)
+if not isinstance(configured_efforts, list):
+    configured_efforts = DEFAULT_EFFORTS
+efforts = list(dict.fromkeys(
+    effort
+    for effort in configured_efforts
+    if isinstance(effort, str) and effort in DEFAULT_EFFORTS
+))
+if not efforts:
+    efforts = DEFAULT_EFFORTS.copy()
+
+default_effort = REASONING_SETTINGS.get("default", efforts[0])
+effort_index = efforts.index(default_effort) if default_effort in efforts else 0
+
+DEFAULT_HOTKEYS = {
+    "ocr_capture": "`",
+    "image_capture": "f10",
+    "configuration": "home",
+    "toggle_overlay": "insert",
+    "clear_answer": "esc",
+    "exit": "delete",
+    "cycle_effort": "f9",
 }
+configured_hotkeys = SETTINGS.get("hotkeys", {})
+if not isinstance(configured_hotkeys, dict):
+    configured_hotkeys = {}
+HOTKEYS = {
+    action: (
+        configured_hotkeys[action].strip()
+        if isinstance(configured_hotkeys.get(action), str)
+        and configured_hotkeys[action].strip()
+        else shortcut
+    )
+    for action, shortcut in DEFAULT_HOTKEYS.items()
+}
+
+
+def hotkey_label(action):
+    key = HOTKEYS[action]
+    return r"\`" if key == "`" else key.upper()
+
+
+window.instructions = "\n".join((
+    f"**{hotkey_label('ocr_capture')}** - OCR-only screenshot",
+    f"**{hotkey_label('configuration')}** - Configuration mode",
+    f"**{hotkey_label('toggle_overlay')}** - Show/hide overlay",
+    f"**{hotkey_label('clear_answer')}** - Clear boxes and answer",
+    f"**{hotkey_label('exit')}** - Exit the program",
+    f"**{hotkey_label('cycle_effort')}** - Change Reasoning Effort",
+    f"**{hotkey_label('image_capture')}** - Screenshot + image to GPT",
+))
+window.starting_instructions = (
+    window.instructions
+    + "\nOnce the application is ready, you may drag and resize this window."
+)
+
+def load_effort_colors():
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+
+        configured_colors = (
+            settings.get("effort_colors", {})
+            if isinstance(settings, dict)
+            else {}
+        )
+
+        if isinstance(configured_colors, dict):
+            return {
+                effort: (
+                    configured_colors[effort]
+                    if isinstance(configured_colors.get(effort), str)
+                    and configured_colors[effort].strip()
+                    else "white"
+                )
+                for effort in efforts
+            }
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Failed to load effort colors: {e}")
+
+    return {effort: "white" for effort in efforts}
+
+
+effort_colors = load_effort_colors()
 
 
 # ============================================================
@@ -241,6 +496,30 @@ def load_title_cache():
     except (json.JSONDecodeError, OSError) as e:
         print(f"Failed to load title cache: {e}")
         return {}
+
+
+def load_test_info_override():
+    """Return the non-empty metadata fields manually set in settings.json."""
+    if not SETTINGS_FILE.exists():
+        return {}
+
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        test_info = settings.get("test_info", {})
+        if not isinstance(test_info, dict):
+            return {}
+        return {
+            key: value.strip()
+            for key, value in test_info.items()
+            if key in {"course", "test_name", "short_test_name"}
+            and isinstance(value, str)
+            and value.strip()
+        }
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Failed to load manual test info: {e}")
+        return {}
+
 
 def save_title_cache(title_cache):
     try:
@@ -327,14 +606,24 @@ def background_worker():
             set_answer("# Analyzing...")
 
             title = get_window_title()
-            test_info = title_cache.get(title)
+            cached_test_info = title_cache.get(title)
+            manual_test_info = load_test_info_override()
+            test_info = {
+                **(cached_test_info or {}),
+                **manual_test_info,
+            }
 
-            if test_info is not None:
-                print("Using cached test info.")
+            required_test_info = ("course", "test_name", "short_test_name")
+            has_complete_test_info = all(
+                test_info.get(key) for key in required_test_info
+            )
+
+            if has_complete_test_info:
+                print("Using configured or cached test info.")
                 title_for_gpt = None
 
             else:
-                print("No cached test info. Extracting title...")
+                print("Extracting missing test info from window title...")
                 title_for_gpt = title
 
             # ------------------------------------------------
@@ -368,16 +657,27 @@ def background_worker():
             # Test info
             # ------------------------------------------------
 
-            if test_info is None:
+            generated_test_info = response.get("test_info") or {}
+            combined_test_info = {
+                **generated_test_info,
+                **(cached_test_info or {}),
+                **manual_test_info,
+            }
+            test_info = (
+                combined_test_info
+                if all(combined_test_info.get(key) for key in required_test_info)
+                else None
+            )
 
-                test_info = response.get("test_info")
-
-                if test_info is not None and title is not None:
-
-                    title_cache[title] = test_info
-                    save_title_cache(title_cache)
-
-                    print("Test info cached and saved.")
+            if (
+                test_info is not None
+                and title is not None
+                and not manual_test_info
+                and cached_test_info is None
+            ):
+                title_cache[title] = test_info
+                save_title_cache(title_cache)
+                print("Test info cached and saved.")
 
             response["test_info"] = test_info
 
@@ -433,26 +733,6 @@ def run_ocr(frame):
 
     result = ocr.predict(frame)
 
-    IGNORE_TEXT = {
-        "Home",
-        "IgniteAI Search",
-        "Syllabus",
-        "Modules",
-        "Announcements",
-        "Assignments",
-        "Grades",
-        "Lucid (Whiteboard)",
-        "Notebook",
-        "Account",
-        "Dashboard",
-        "Courses",
-        "Calendar",
-        "Inbox",
-        "History",
-        "Studio",
-        "Help",
-    }
-
     boxes = []
     ocr_results = []
 
@@ -468,12 +748,12 @@ def run_ocr(frame):
             detected_boxes,
         ):
 
-            if score < 0.7:
+            if score < ocr_min_confidence:
                 continue
 
             text = text.strip()
 
-            if text in IGNORE_TEXT:
+            if text in ignored_text:
                 continue
 
             box = [int(x) for x in box]
@@ -503,7 +783,7 @@ def run_ocr(frame):
     groups = []
     current_group = [intervals[0]]
 
-    GAP = 150
+    gap = ocr_region_gap
 
     for interval in intervals[1:]:
 
@@ -514,7 +794,7 @@ def run_ocr(frame):
 
         next_start = interval[0]
 
-        if next_start - current_end <= GAP:
+        if next_start - current_end <= gap:
 
             current_group.append(interval)
 
@@ -586,7 +866,7 @@ def run_ocr(frame):
 
     # Add padding
 
-    padding = 20
+    padding = ocr_region_padding
 
     start_x = max(
         0,
@@ -626,7 +906,7 @@ def process_response(
 
     answers = response["answers"]
 
-    path = Path("Answers")
+    path = screenshot_folder
 
     test_name = "answers"
     short_test_name = "answers"
@@ -642,97 +922,94 @@ def process_response(
         short_test_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '', short_test_name).strip().rstrip('.')
         path = (path / course)
 
-    path.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    if SAVE_MARKDOWN or SAVE_PDF:
+        path.mkdir(parents=True, exist_ok=True)
 
     # --------------------------------------------------------
     # Markdown
     # --------------------------------------------------------
 
-    with open(
-        path / f"{short_test_name}.md",
-        "a+",
-        encoding="utf-8",
-    ) as f:
+    if SAVE_MARKDOWN:
+        with open(
+            path / f"{short_test_name}.md",
+            "a+",
+            encoding="utf-8",
+        ) as f:
 
-        f.seek(0)
+            f.seek(0)
 
-        txt = f.read()
+            txt = f.read()
 
-        datenow = datetime.now()
+            datenow = datetime.now()
 
-        date = "## " + datenow.strftime(
-            "%B %d, %Y"
-        )
-
-        time = (
-            f"<br><small>"
-            f"{datenow.strftime('%I:%M %p')}"
-            f"</small>"
-        )
-
-        formatted_title = f"# {test_name}"
-
-        if formatted_title not in txt:
-
-            if txt:
-
-                if txt.endswith("\n\n"):
-                    pass
-
-                elif txt.endswith("\n"):
-                    f.write("\n")
-
-                else:
-                    f.write("\n\n")
-
-            f.write(
-                formatted_title
-                + "\n\n"
+            date = "## " + datenow.strftime(
+                "%B %d, %Y"
             )
 
-        if date not in txt:
+            time = (
+                f"<br><small>"
+                f"{datenow.strftime('%I:%M %p')}"
+                f"</small>"
+            )
+
+            formatted_title = f"# {test_name}"
+
+            if formatted_title not in txt:
+
+                if txt:
+
+                    if txt.endswith("\n\n"):
+                        pass
+
+                    elif txt.endswith("\n"):
+                        f.write("\n")
+
+                    else:
+                        f.write("\n\n")
+
+                f.write(
+                    formatted_title
+                    + "\n\n"
+                )
+
+            if date not in txt:
+
+                f.write(
+                    date
+                    + "\n"
+                )
+
+            if time not in txt:
+
+                f.write(
+                    "\n"
+                    + time
+                    + "\n"
+                )
+
+            md_answer = re.sub(
+                r"^(#+)",
+                r"#\1",
+                formatted_response,
+                flags=re.MULTILINE,
+            )
 
             f.write(
-                date
+                md_answer
                 + "\n"
             )
-
-        if time not in txt:
-
-            f.write(
-                "\n"
-                + time
-                + "\n"
-            )
-
-        md_answer = re.sub(
-            r"^(#+)",
-            r"#\1",
-            formatted_response,
-            flags=re.MULTILINE,
-        )
-
-        f.write(
-            md_answer
-            + "\n"
-        )
 
     # --------------------------------------------------------
     # PDF
     # --------------------------------------------------------
 
-    pdf_path = (
-        path
-        / f"{short_test_name}.pdf"
-    )
+    if SAVE_PDF:
+        pdf_path = path / f"{short_test_name}.pdf"
 
-    add_frame_to_pdf(
-        pdf_path,
-        frame,
-    )
+        add_frame_to_pdf(
+            pdf_path,
+            frame,
+        )
 
     # --------------------------------------------------------
     # Highlight boxes
@@ -866,7 +1143,7 @@ def home_pressed():
 
 
 keyboard.add_hotkey(
-    "home",
+    HOTKEYS["configuration"],
     home_pressed,
     suppress=True,
 )
@@ -884,7 +1161,7 @@ def delete_pressed():
 
 
 keyboard.add_hotkey(
-    "delete",
+    HOTKEYS["exit"],
     delete_pressed,
     suppress=True,
 )
@@ -902,7 +1179,7 @@ def insert_pressed():
 
 
 keyboard.add_hotkey(
-    "insert",
+    HOTKEYS["toggle_overlay"],
     insert_pressed,
     suppress=True,
 )
@@ -920,7 +1197,7 @@ def escape_pressed():
 
 
 keyboard.add_hotkey(
-    "esc",
+    HOTKEYS["clear_answer"],
     escape_pressed,
     suppress=True,
 )
@@ -952,7 +1229,7 @@ def f10_pressed():
 
 
 keyboard.add_hotkey(
-    "f10",
+    HOTKEYS["image_capture"],
     f10_pressed,
     suppress=True,
 )
@@ -980,7 +1257,7 @@ def backtick_pressed():
 
 
 keyboard.add_hotkey(
-    "`",
+    HOTKEYS["ocr_capture"],
     backtick_pressed,
     suppress=True,
 )
@@ -1010,7 +1287,7 @@ def change_effort():
 
 
 keyboard.add_hotkey(
-    "f9",
+    HOTKEYS["cycle_effort"],
     change_effort,
     suppress=True,
 )

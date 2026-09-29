@@ -6,6 +6,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
+from app_config import load_settings
 
 load_dotenv()
 
@@ -13,6 +14,31 @@ from PIL import Image
 
 
 client = OpenAI()
+
+SETTINGS = load_settings()
+
+MODEL_SETTINGS = SETTINGS.get("models", {})
+if not isinstance(MODEL_SETTINGS, dict):
+    MODEL_SETTINGS = {}
+
+
+def configured_string(value, default):
+    return value.strip() if isinstance(value, str) and value.strip() else default
+
+
+ANSWER_MODEL = configured_string(
+    MODEL_SETTINGS.get("answer"),
+    "gpt-6-astra",
+)
+TITLE_MODEL = configured_string(
+    MODEL_SETTINGS.get("title_extraction"),
+    "gpt-5.4-nano",
+)
+
+REASONING_SETTINGS = SETTINGS.get("reasoning", {})
+if not isinstance(REASONING_SETTINGS, dict):
+    REASONING_SETTINGS = {}
+REASONING_MODE = configured_string(REASONING_SETTINGS.get("mode"), "pro")
 
 
 # ============================================================
@@ -23,10 +49,16 @@ def image_to_data_url(image):
 
     buffer = io.BytesIO()
 
+    image_settings = load_settings().get("image", {})
+    quality = image_settings.get("jpeg_quality", 90) if isinstance(image_settings, dict) else 90
+    if not isinstance(quality, int) or isinstance(quality, bool):
+        quality = 90
+    quality = max(1, min(100, quality))
+
     pil_image.save(
         buffer,
         format="JPEG",
-        quality=90,
+        quality=quality,
         optimize=True
     )
 
@@ -41,10 +73,9 @@ def image_to_data_url(image):
 # ============================================================
 def get_test_info(title):
     started_at = time.perf_counter()
-    with open("settings.json","r") as f:
-        courses = json.load(f).get("courses",[])
+    courses = load_settings().get("courses", [])
     response = client.responses.create(
-    model="gpt-5.4-nano",
+    model=TITLE_MODEL,
     reasoning={"effort": "none"},
     input=f"""Extract Course, Test Name, and Short Test Name.
 
@@ -148,10 +179,10 @@ def _answer_request(ocr_results, image=None, effort="xhigh"):
     # ========================================================
 
     response = client.responses.create(
-        model="gpt-6-astra",
+        model=ANSWER_MODEL,
         reasoning={
             "effort": effort,
-            "mode": "pro"
+            "mode": REASONING_MODE,
         },
 
         instructions="""

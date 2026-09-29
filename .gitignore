@@ -5,3 +5,6 @@ Answers
 .env
 .venv
 settings.json
+build
+dist
+*.spec

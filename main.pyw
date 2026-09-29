@@ -497,30 +497,6 @@ def load_title_cache():
         print(f"Failed to load title cache: {e}")
         return {}
 
-
-def load_test_info_override():
-    """Return the non-empty metadata fields manually set in settings.json."""
-    if not SETTINGS_FILE.exists():
-        return {}
-
-    try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            settings = json.load(f)
-        test_info = settings.get("test_info", {})
-        if not isinstance(test_info, dict):
-            return {}
-        return {
-            key: value.strip()
-            for key, value in test_info.items()
-            if key in {"course", "test_name", "short_test_name"}
-            and isinstance(value, str)
-            and value.strip()
-        }
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Failed to load manual test info: {e}")
-        return {}
-
-
 def save_title_cache(title_cache):
     try:
         if SETTINGS_FILE.exists():
@@ -606,24 +582,14 @@ def background_worker():
             set_answer("# Analyzing...")
 
             title = get_window_title()
-            cached_test_info = title_cache.get(title)
-            manual_test_info = load_test_info_override()
-            test_info = {
-                **(cached_test_info or {}),
-                **manual_test_info,
-            }
+            test_info = title_cache.get(title)
 
-            required_test_info = ("course", "test_name", "short_test_name")
-            has_complete_test_info = all(
-                test_info.get(key) for key in required_test_info
-            )
-
-            if has_complete_test_info:
-                print("Using configured or cached test info.")
+            if test_info is not None:
+                print("Using cached test info.")
                 title_for_gpt = None
 
             else:
-                print("Extracting missing test info from window title...")
+                print("No cached test info. Extracting title...")
                 title_for_gpt = title
 
             # ------------------------------------------------
@@ -918,7 +884,7 @@ def process_response(
         course = test_info["course"]
 
         test_name = test_info["test_name"]
-        short_test_name = test_info["short_test_name"]
+        short_test_name = test_info.get("short_test_name") or test_name
         short_test_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '', short_test_name).strip().rstrip('.')
         path = (path / course)
 

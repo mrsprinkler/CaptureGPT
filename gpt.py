@@ -72,8 +72,8 @@ Example:
                 "type": "object",
                 "properties": {
                     "course": {"type": "string"},
-                    "test_name": {"type": ["string", "null"]},
-                    "short_test_name": {"type": ["string", "null"]}
+                    "test_name": {"type": "string"},
+                    "short_test_name": {"type": "string"}
                 },
                 "required": ["course", "test_name", "short_test_name"],
                 "additionalProperties": False
@@ -184,7 +184,7 @@ For multiple choice, letters follow choice order: A = 1st, B = 2nd, C = 3rd, etc
 For multiple-answer questions, include every correct letter in choice order.
 
 Put each question on its own line. For longer free response questions, don't bold the entire answer and put it on its own line.
-
+If a question appears incomplete and it is impossible to answer, ignore it. Do not state the question
 Note: Each Question should start with a Header-2.
 
 Examples:

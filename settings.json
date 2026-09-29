@@ -1,24 +1,49 @@
 {
-  "version": 1,
-  "README": [
-    "Replace courses with your courses.",
-    "You can either keep it in array format, or have it as one big string, Example below",
-    {
-      "courses": "AP Computer Science, AP Environmental Science, AP Precalculus, AP Statistics, Economics, English 4"
+    "version": 1,
+    "answer_box": {
+        "x": 1088.4,
+        "y": 368.1999999999998,
+        "width": 417.9999999999998,
+        "height": 505.4
+    },
+    "courses": [
+        "AP Computer Science",
+        "AP Environmental Science",
+        "AP Precalculus",
+        "AP Statistics",
+        "Economics",
+        "English 4"
+    ],
+    "test_info": {
+        "course": null,
+        "test_name": null,
+        "short_test_name": null
+    },
+    "title_cache": {
+        "Evaluate: Week 3 Practice Quiz: Ap Statistics Sem A-Semester 1-2026/2027 and 1 more page - Personal - Microsoft​ Edge": {
+            "course": "AP Statistics",
+            "test_name": "Week 3 Practice Quiz",
+            "short_test_name": "Week 3 Practice Quiz"
+        },
+        "Secure Exam Proctor is sharing your screen.": {
+            "course": "English 4",
+            "test_name": "1st Week Exam",
+            "short_test_name": "1st Week Exam"
+        },
+        "02 Evaluate: Week 2 Graded Assignment: Ap Statistics Sem A-Semester 1-2026/2027 and 1 more page - Personal - Microsoft​ Edge": {
+            "course": "AP Statistics",
+            "test_name": "Week 2 Graded Assignment",
+            "short_test_name": "Week 2 Graded Assignment"
+        },
+        "Instructions page - Personal - Microsoft​ Edge": {
+            "course": "English 4",
+            "test_name": "Instructions page - Personal",
+            "short_test_name": "Instructions page Personal"
+        },
+        "New tab and 1 more page - Personal - Microsoft​ Edge": {
+            "course": "English 4",
+            "test_name": "New tab and 1 more page",
+            "short_test_name": "New tab and 1 more page"
+        }
     }
-  ],
-  "answer_box": {
-    "x": 1400.0,
-    "y": 640.0,
-    "width": 510.0,
-    "height": 290.0
-  },
-  "courses": [
-    "AP Computer Science",
-    "AP Environmental Science",
-    "AP Precalculus",
-    "AP Statistics",
-    "Economics",
-    "English 4"
-  ]
 }

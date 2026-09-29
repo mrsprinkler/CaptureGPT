@@ -1,3 +1,12 @@
+"""
+"courses": [
+    "AP Computer Science",
+    "AP Environmental Science",
+    "AP Precalculus",
+    "AP Statistics",
+    "Economics",
+    "English 4"
+  ]"""
 print("Starting...")
 
 import window
@@ -242,6 +251,36 @@ def load_title_cache():
         print(f"Failed to load title cache: {e}")
         return {}
 
+def load_configured_test_info():
+    """Return manually configured test info when its required fields exist."""
+    if not SETTINGS_FILE.exists():
+        return None
+
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            configured = json.load(f).get("test_info")
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Failed to load configured test info: {e}")
+        return None
+
+    if not isinstance(configured, dict):
+        return None
+
+    course = configured.get("course")
+    test_name = configured.get("test_name")
+    if not course or test_name is None:
+        return None
+
+    short_test_name = configured.get("short_test_name")
+    if short_test_name is None:
+        short_test_name = test_name
+
+    return {
+        "course": course,
+        "test_name": test_name,
+        "short_test_name": short_test_name,
+    }
+
 def save_title_cache(title_cache):
     try:
         if SETTINGS_FILE.exists():
@@ -327,15 +366,22 @@ def background_worker():
             set_answer("# Analyzing...")
 
             title = get_window_title()
-            test_info = title_cache.get(title)
+            test_info = load_configured_test_info()
 
             if test_info is not None:
-                print("Using cached test info.")
+                print("Using test info from settings.")
                 title_for_gpt = None
 
             else:
-                print("No cached test info. Extracting title...")
-                title_for_gpt = title
+                test_info = title_cache.get(title)
+
+                if test_info is not None:
+                    print("Using cached test info.")
+                    title_for_gpt = None
+
+                else:
+                    print("No cached test info. Extracting title...")
+                    title_for_gpt = title
 
             # ------------------------------------------------
             # GPT
@@ -638,7 +684,7 @@ def process_response(
         course = test_info["course"]
 
         test_name = test_info["test_name"]
-        short_test_name = test_info["short_test_name"]
+        short_test_name = test_info.get("short_test_name") or test_name
         short_test_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '', short_test_name).strip().rstrip('.')
         path = (path / course)
 

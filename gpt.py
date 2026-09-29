@@ -15,24 +15,16 @@ from PIL import Image
 
 client = OpenAI()
 
-SETTINGS = load_settings()
-
-MODEL_SETTINGS = SETTINGS["models"]
-ANSWER_MODEL = MODEL_SETTINGS["answer"]
-TITLE_MODEL = MODEL_SETTINGS["title_extraction"]
-REASONING_SETTINGS = SETTINGS["reasoning"]
-REASONING_MODE = REASONING_SETTINGS["mode"]
-
-
 # ============================================================
 # Convert DXCam NumPy image to a base64 data URL
 # ============================================================
-def image_to_data_url(image):
+def image_to_data_url(image, settings=None):
+    settings = settings or load_settings()
     pil_image = Image.fromarray(image)
 
     buffer = io.BytesIO()
 
-    quality = load_settings()["image"]["jpeg_quality"]
+    quality = settings["image"]["jpeg_quality"]
     quality = max(1, min(100, quality))
 
     pil_image.save(
@@ -51,12 +43,13 @@ def image_to_data_url(image):
 # ============================================================
 # Answer
 # ============================================================
-def get_test_info(title):
+def get_test_info(title, settings=None):
     started_at = time.perf_counter()
-    settings = load_settings()
+    settings = settings or load_settings()
     courses = settings["courses"]
+    model_settings = settings["models"]
     response = client.responses.create(
-    model=TITLE_MODEL,
+    model=model_settings["title_extraction"],
     reasoning={"effort": settings["reasoning"]["title_extraction_effort"]},
     input=f"""Extract Course, Test Name, and Short Test Name.
 
@@ -97,15 +90,16 @@ Example:
     return json.loads(response.output_text)
 
 
-def answer(ocr_results, title=None, image=None, effort=None):
+def answer(ocr_results, title=None, image=None, effort=None, settings=None):
+    settings = settings or load_settings()
     if effort is None:
-        effort = REASONING_SETTINGS["last_used"]
+        effort = settings["reasoning"]["last_used"]
     started_at = time.perf_counter()
     with ThreadPoolExecutor(max_workers=2 if title else 1) as executor:
         answer_future = executor.submit(
-            _answer_request, ocr_results, image, effort
+            _answer_request, ocr_results, image, effort, settings
         )
-        title_future = executor.submit(get_test_info, title) if title else None
+        title_future = executor.submit(get_test_info, title, settings) if title else None
         result = answer_future.result()
         if title_future is not None:
             result["test_info"] = title_future.result()
@@ -120,9 +114,10 @@ def answer(ocr_results, title=None, image=None, effort=None):
     return result
 
 
-def _answer_request(ocr_results, image=None, effort=None):
+def _answer_request(ocr_results, image=None, effort=None, settings=None):
+    settings = settings or load_settings()
     if effort is None:
-        effort = REASONING_SETTINGS["last_used"]
+        effort = settings["reasoning"]["last_used"]
     started_at = time.perf_counter()
     # return {"answers":[], "response":"""## Question 1: **A**. W\n## Question 2: **B**. X\n## Question 3: **B**. X"""}
 
@@ -150,9 +145,7 @@ def _answer_request(ocr_results, image=None, effort=None):
     # ========================================================
 
     if image is not None:
-        image_data_url = image_to_data_url(
-            image
-        )
+        image_data_url = image_to_data_url(image, settings)
 
         content.append({
             "type": "input_image",
@@ -164,10 +157,10 @@ def _answer_request(ocr_results, image=None, effort=None):
     # ========================================================
 
     response = client.responses.create(
-        model=ANSWER_MODEL,
+        model=settings["models"]["answer"],
         reasoning={
             "effort": effort,
-            "mode": REASONING_MODE,
+            "mode": settings["reasoning"]["mode"],
         },
 
         instructions="""

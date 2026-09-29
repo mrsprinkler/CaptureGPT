@@ -10,8 +10,67 @@
   "answer_box": {
     "x": 1400.0,
     "y": 640.0,
-    "width": 510.0,
-    "height": 290.0
+    "width": 509.0,
+    "height": 298.0
+  },
+  "effort_colors": {
+    "low": "#4CAF50",
+    "medium": "#8BC34A",
+    "high": "#FFC107",
+    "xhigh": "#FF9800",
+    "max": "#F44336"
+  },
+  "ocr": {
+    "language": "en",
+    "device": "gpu:0",
+    "min_confidence": 0.7,
+    "region_gap": 150,
+    "region_padding": 20,
+    "ignored_text": [
+      "Home",
+      "IgniteAI Search",
+      "Syllabus",
+      "Modules",
+      "Announcements",
+      "Assignments",
+      "Grades",
+      "Lucid (Whiteboard)",
+      "Notebook",
+      "Account",
+      "Dashboard",
+      "Courses",
+      "Calendar",
+      "Inbox",
+      "History",
+      "Studio",
+      "Help"
+    ]
+  },
+  "reasoning": {
+    "mode": "pro",
+    "efforts": ["high", "xhigh", "medium", "low", "max"],
+    "default": "high"
+  },
+  "models": {
+    "answer": "gpt-6-astra",
+    "title_extraction": "gpt-5.4-nano"
+  },
+  "image": {
+    "jpeg_quality": 90
+  },
+  "hotkeys": {
+    "ocr_capture": "`",
+    "image_capture": "f10",
+    "configuration": "home",
+    "toggle_overlay": "insert",
+    "clear_answer": "esc",
+    "exit": "delete",
+    "cycle_effort": "f9"
+  },
+  "output": {
+    "directory": "Answers",
+    "save_markdown": true,
+    "save_pdf": true
   },
   "courses": [
     "AP Computer Science",
@@ -20,5 +79,11 @@
     "AP Statistics",
     "Economics",
     "English 4"
-  ]
+  ],
+  "test_info": {
+    "course": null,
+    "test_name": null,
+    "short_test_name": null
+  },
+  "title_cache": {}
 }

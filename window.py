@@ -3,7 +3,7 @@ import ctypes
 import json
 import markdown
 
-from app_config import SETTINGS_FILE
+from app_config import SETTINGS_FILE, load_settings
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import (
@@ -14,17 +14,47 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QApplication, QWidget
 
-instructions = """
-**\\`** — OCR-only screenshot
-**Home** — Configuration mode
-**Insert** — Show/hide overlay
-**Escape** — Clear boxes and answer
-**Delete** — Exit the program
-**F9** — Change Reasoning Effort
-**F10** — Screenshot + image to GPT
-"""
+DEFAULT_HOTKEYS = {
+    "ocr_capture": "`",
+    "image_capture": "f10",
+    "configuration": "home",
+    "toggle_overlay": "insert",
+    "clear_answer": "esc",
+    "exit": "delete",
+    "cycle_effort": "f9",
+}
+_configured_hotkeys = load_settings().get("hotkeys", {})
+if not isinstance(_configured_hotkeys, dict):
+    _configured_hotkeys = {}
+HOTKEYS = {
+    action: (
+        _configured_hotkeys[action].strip()
+        if isinstance(_configured_hotkeys.get(action), str)
+        and _configured_hotkeys[action].strip()
+        else shortcut
+    )
+    for action, shortcut in DEFAULT_HOTKEYS.items()
+}
 
-starting_instructions = instructions + "\nOnce the application is ready, you may drag and resize this window."
+
+def _display_hotkey(action):
+    key = HOTKEYS[action]
+    return r"\`" if key == "`" else key.upper()
+
+
+instructions = "\n".join((
+    f"**{_display_hotkey('ocr_capture')}** - OCR-only screenshot",
+    f"**{_display_hotkey('configuration')}** - Configuration mode",
+    f"**{_display_hotkey('toggle_overlay')}** - Show/hide overlay",
+    f"**{_display_hotkey('clear_answer')}** - Clear boxes and answer",
+    f"**{_display_hotkey('exit')}** - Exit the program",
+    f"**{_display_hotkey('cycle_effort')}** - Change Reasoning Effort",
+    f"**{_display_hotkey('image_capture')}** - Screenshot + image to GPT",
+))
+starting_instructions = (
+    instructions
+    + "\nOnce the application is ready, you may drag and resize this window."
+)
 
 # ================================================================
 # Settings

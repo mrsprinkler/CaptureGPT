@@ -215,7 +215,7 @@ def ensure_openai_api_key():
         timer.stop()
         key = key_input.text().strip()
 
-    if not is_api_key(key):
+    while not is_api_key(key):
         message.setText("That does not look like an API key. Please try again.")
         key_input.clear()
         timer = QTimer(dialog)
@@ -413,27 +413,6 @@ HOTKEYS = {
     )
     for action, shortcut in DEFAULT_HOTKEYS.items()
 }
-
-
-def hotkey_label(action):
-    key = HOTKEYS[action]
-    return r"\`" if key == "`" else key.upper()
-
-
-window.instructions = "\n".join((
-    f"**{hotkey_label('ocr_capture')}** - OCR-only screenshot",
-    f"**{hotkey_label('configuration')}** - Configuration mode",
-    f"**{hotkey_label('toggle_overlay')}** - Show/hide overlay",
-    f"**{hotkey_label('clear_answer')}** - Clear boxes and answer",
-    f"**{hotkey_label('exit')}** - Exit the program",
-    f"**{hotkey_label('cycle_effort')}** - Change Reasoning Effort",
-    f"**{hotkey_label('image_capture')}** - Screenshot + image to GPT",
-))
-window.starting_instructions = (
-    window.instructions
-    + "\nOnce the application is ready, you may drag and resize this window."
-)
-
 def load_effort_colors():
     try:
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
@@ -491,7 +470,17 @@ def load_title_cache():
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
             settings = json.load(f)
 
-        return settings.get("title_cache", {})
+        if not isinstance(settings, dict):
+            return {}
+
+        cache = settings.get("title_cache", {})
+        if not isinstance(cache, dict):
+            return {}
+        return {
+            title: info
+            for title, info in cache.items()
+            if isinstance(title, str) and isinstance(info, dict)
+        }
 
     except (json.JSONDecodeError, OSError) as e:
         print(f"Failed to load title cache: {e}")
@@ -505,6 +494,9 @@ def save_title_cache(title_cache):
         else:
             settings = {}
 
+        if not isinstance(settings, dict):
+            settings = {}
+
         settings["title_cache"] = title_cache
 
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -512,6 +504,22 @@ def save_title_cache(title_cache):
 
     except (json.JSONDecodeError, OSError) as e:
         print(f"Failed to save title cache: {e}")
+
+
+def load_test_info_override():
+    """Load non-empty manual course/test fields from the shared settings file."""
+    settings = load_settings()
+    test_info = settings.get("test_info", {})
+    if not isinstance(test_info, dict):
+        return {}
+
+    return {
+        key: value.strip()
+        for key, value in test_info.items()
+        if key in {"course", "test_name", "short_test_name"}
+        and isinstance(value, str)
+        and value.strip()
+    }
 
 
 title_cache = load_title_cache()
@@ -582,14 +590,24 @@ def background_worker():
             set_answer("# Analyzing...")
 
             title = get_window_title()
-            test_info = title_cache.get(title)
+            cached_test_info = title_cache.get(title)
+            manual_test_info = load_test_info_override()
+            test_info = {
+                **(cached_test_info or {}),
+                **manual_test_info,
+            }
 
-            if test_info is not None:
-                print("Using cached test info.")
+            required_test_info = ("course", "test_name", "short_test_name")
+            has_complete_test_info = all(
+                test_info.get(key) for key in required_test_info
+            )
+
+            if has_complete_test_info:
+                print("Using configured or cached test info.")
                 title_for_gpt = None
 
             else:
-                print("No cached test info. Extracting title...")
+                print("Extracting missing test info from window title...")
                 title_for_gpt = title
 
             # ------------------------------------------------
@@ -884,7 +902,7 @@ def process_response(
         course = test_info["course"]
 
         test_name = test_info["test_name"]
-        short_test_name = test_info.get("short_test_name") or test_name
+        short_test_name = test_info["short_test_name"]
         short_test_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '', short_test_name).strip().rstrip('.')
         path = (path / course)
 

@@ -31,7 +31,7 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 import io
 import img2pdf
-from app_config import APP_DIR, SETTINGS_FILE, load_settings
+from app_config import APP_DIR, load_settings, update_settings
 
 def get_window_title():
     excluded = {
@@ -66,19 +66,11 @@ def get_window_title():
 
 SETTINGS = load_settings()
 
-OUTPUT_SETTINGS = SETTINGS.get("output", {})
-if not isinstance(OUTPUT_SETTINGS, dict):
-    OUTPUT_SETTINGS = {}
-SAVE_MARKDOWN = OUTPUT_SETTINGS.get("save_markdown", True)
-SAVE_PDF = OUTPUT_SETTINGS.get("save_pdf", True)
-if not isinstance(SAVE_MARKDOWN, bool):
-    SAVE_MARKDOWN = True
-if not isinstance(SAVE_PDF, bool):
-    SAVE_PDF = True
+OUTPUT_SETTINGS = SETTINGS["output"]
+SAVE_MARKDOWN = OUTPUT_SETTINGS["save_markdown"]
+SAVE_PDF = OUTPUT_SETTINGS["save_pdf"]
 
-output_directory_value = OUTPUT_SETTINGS.get("directory", "Answers")
-if not isinstance(output_directory_value, str) or not output_directory_value.strip():
-    output_directory_value = "Answers"
+output_directory_value = OUTPUT_SETTINGS["directory"]
 output_directory = Path(output_directory_value)
 if not output_directory.is_absolute():
     output_directory = APP_DIR / output_directory
@@ -147,12 +139,7 @@ def ensure_openai_api_key():
     )
     import webbrowser
 
-    app_dir = (
-        Path(sys.executable).resolve().parent
-        if getattr(sys, "frozen", False)
-        else Path(__file__).resolve().parent
-    )
-    env_file = app_dir / ".env"
+    env_file = APP_DIR / ".env"
 
     def is_api_key(value):
         return bool(re.fullmatch(r"sk-[A-Za-z0-9_-]{20,}", value.strip()))
@@ -293,52 +280,24 @@ print("DPR:", dpr)
 
 printStatus("Initializing OCR...")
 
-OCR_SETTINGS = SETTINGS.get("ocr", {})
-if not isinstance(OCR_SETTINGS, dict):
-    OCR_SETTINGS = {}
-
-ocr_language = OCR_SETTINGS.get("language", "en")
-if not isinstance(ocr_language, str) or not ocr_language.strip():
-    ocr_language = "en"
-
-ocr_device = OCR_SETTINGS.get("device", "gpu:0")
-if not isinstance(ocr_device, str) or not ocr_device.strip():
-    ocr_device = "gpu:0"
-
-ocr_min_confidence = OCR_SETTINGS.get("min_confidence", 0.7)
-if not isinstance(ocr_min_confidence, (int, float)) or isinstance(ocr_min_confidence, bool):
-    ocr_min_confidence = 0.7
-ocr_min_confidence = max(0.0, min(1.0, float(ocr_min_confidence)))
-
-ocr_region_gap = OCR_SETTINGS.get("region_gap", 150)
-if not isinstance(ocr_region_gap, int) or isinstance(ocr_region_gap, bool):
-    ocr_region_gap = 150
-
-ocr_region_padding = OCR_SETTINGS.get("region_padding", 20)
-if not isinstance(ocr_region_padding, int) or isinstance(ocr_region_padding, bool):
-    ocr_region_padding = 20
-
-default_ignored_text = {
-    "Home", "IgniteAI Search", "Syllabus", "Modules", "Announcements",
-    "Assignments", "Grades", "Lucid (Whiteboard)", "Notebook", "Account",
-    "Dashboard", "Courses", "Calendar", "Inbox", "History", "Studio", "Help",
+OCR_SETTINGS = SETTINGS["ocr"]
+ocr_language = OCR_SETTINGS["language"]
+ocr_device = OCR_SETTINGS["device"]
+ocr_min_confidence = max(0.0, min(1.0, float(OCR_SETTINGS["min_confidence"])))
+ocr_region_gap = OCR_SETTINGS["region_gap"]
+ocr_region_padding = OCR_SETTINGS["region_padding"]
+ignored_text = {
+    text.strip()
+    for text in OCR_SETTINGS["ignored_text"]
+    if isinstance(text, str) and text.strip()
 }
-configured_ignored_text = OCR_SETTINGS.get("ignored_text", default_ignored_text)
-if isinstance(configured_ignored_text, list):
-    ignored_text = {
-        text.strip()
-        for text in configured_ignored_text
-        if isinstance(text, str) and text.strip()
-    }
-else:
-    ignored_text = default_ignored_text
 
 ocr = PaddleOCR(
     lang=ocr_language,
     device=ocr_device,
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    use_textline_orientation=False,
+    use_doc_orientation_classify=OCR_SETTINGS["use_doc_orientation_classify"],
+    use_doc_unwarping=OCR_SETTINGS["use_doc_unwarping"],
+    use_textline_orientation=OCR_SETTINGS["use_textline_orientation"],
 )
 
 
@@ -366,81 +325,28 @@ delete_requested = False
 insert_requested = False
 escape_requested = False
 
-DEFAULT_EFFORTS = [
-    "high",
-    "xhigh",
-    "medium",
-    "low",
-    "max",
-]
-
-REASONING_SETTINGS = SETTINGS.get("reasoning", {})
-if not isinstance(REASONING_SETTINGS, dict):
-    REASONING_SETTINGS = {}
-
-configured_efforts = REASONING_SETTINGS.get("efforts", DEFAULT_EFFORTS)
-if not isinstance(configured_efforts, list):
-    configured_efforts = DEFAULT_EFFORTS
+REASONING_SETTINGS = SETTINGS["reasoning"]
+configured_efforts = REASONING_SETTINGS["efforts"]
 efforts = list(dict.fromkeys(
     effort
     for effort in configured_efforts
-    if isinstance(effort, str) and effort in DEFAULT_EFFORTS
+    if isinstance(effort, str) and effort.strip()
 ))
 if not efforts:
-    efforts = DEFAULT_EFFORTS.copy()
+    efforts = [REASONING_SETTINGS["default"]]
 
-default_effort = REASONING_SETTINGS.get("default", efforts[0])
-effort_index = efforts.index(default_effort) if default_effort in efforts else 0
+default_effort = REASONING_SETTINGS["default"]
+last_used_effort = REASONING_SETTINGS["last_used"]
+starting_effort = (
+    last_used_effort
+    if last_used_effort in efforts
+    else default_effort
+)
+effort_index = efforts.index(starting_effort) if starting_effort in efforts else 0
+window.update_instructions(efforts[effort_index])
 
-DEFAULT_HOTKEYS = {
-    "ocr_capture": "`",
-    "image_capture": "f10",
-    "configuration": "home",
-    "toggle_overlay": "insert",
-    "clear_answer": "esc",
-    "exit": "delete",
-    "cycle_effort": "f9",
-}
-configured_hotkeys = SETTINGS.get("hotkeys", {})
-if not isinstance(configured_hotkeys, dict):
-    configured_hotkeys = {}
-HOTKEYS = {
-    action: (
-        configured_hotkeys[action].strip()
-        if isinstance(configured_hotkeys.get(action), str)
-        and configured_hotkeys[action].strip()
-        else shortcut
-    )
-    for action, shortcut in DEFAULT_HOTKEYS.items()
-}
-def load_effort_colors():
-    try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            settings = json.load(f)
-
-        configured_colors = (
-            settings.get("effort_colors", {})
-            if isinstance(settings, dict)
-            else {}
-        )
-
-        if isinstance(configured_colors, dict):
-            return {
-                effort: (
-                    configured_colors[effort]
-                    if isinstance(configured_colors.get(effort), str)
-                    and configured_colors[effort].strip()
-                    else "white"
-                )
-                for effort in efforts
-            }
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Failed to load effort colors: {e}")
-
-    return {effort: "white" for effort in efforts}
-
-
-effort_colors = load_effort_colors()
+HOTKEYS = SETTINGS["hotkeys"]
+effort_colors = SETTINGS["effort_colors"]
 
 
 # ============================================================
@@ -463,44 +369,16 @@ def set_answer(txt):
     )
 
 def load_title_cache():
-    if not SETTINGS_FILE.exists():
-        return {}
-
-    try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            settings = json.load(f)
-
-        if not isinstance(settings, dict):
-            return {}
-
-        cache = settings.get("title_cache", {})
-        if not isinstance(cache, dict):
-            return {}
-        return {
-            title: info
-            for title, info in cache.items()
-            if isinstance(title, str) and isinstance(info, dict)
-        }
-
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Failed to load title cache: {e}")
-        return {}
+    cache = load_settings()["title_cache"]
+    return {
+        title: info
+        for title, info in cache.items()
+        if isinstance(title, str) and isinstance(info, dict)
+    }
 
 def save_title_cache(title_cache):
     try:
-        if SETTINGS_FILE.exists():
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                settings = json.load(f)
-        else:
-            settings = {}
-
-        if not isinstance(settings, dict):
-            settings = {}
-
-        settings["title_cache"] = title_cache
-
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=4, ensure_ascii=False)
+        update_settings({"title_cache": title_cache})
 
     except (json.JSONDecodeError, OSError) as e:
         print(f"Failed to save title cache: {e}")
@@ -509,9 +387,7 @@ def save_title_cache(title_cache):
 def load_test_info_override():
     """Load non-empty manual course/test fields from the shared settings file."""
     settings = load_settings()
-    test_info = settings.get("test_info", {})
-    if not isinstance(test_info, dict):
-        return {}
+    test_info = settings["test_info"]
 
     return {
         key: value.strip()
@@ -1265,8 +1141,17 @@ def change_effort():
     if effort_index >= efforts_len:
         effort_index = 0
 
+    current_effort = efforts[effort_index]
+
+    try:
+        update_settings({"reasoning": {"last_used": current_effort}})
+    except (OSError, TypeError) as e:
+        print(f"Failed to save reasoning effort: {e}")
+
+    window.update_instructions(current_effort)
+
     set_answer(
-        f"# Reasoning Effort: **{efforts[effort_index]}**"
+        f"# Reasoning Effort: **{current_effort}**"
     )
 
 

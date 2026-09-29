@@ -113,7 +113,8 @@ The `ocr` object controls OCR initialization and question-region detection:
 ### Reasoning and image settings
 
 - `reasoning.efforts` sets the options cycled by the effort shortcut. The default list is `high`, `xhigh`, `medium`, `low`, `max`.
-- `reasoning.default` sets the starting option. The default is `high`.
+- `reasoning.default` sets the initial option. The default is `high`.
+- CaptureGPT saves the most recently selected option as `reasoning.last_used` and restores it on the next launch, as long as it remains in `reasoning.efforts`.
 - `reasoning.mode` sets the reasoning mode for answer requests. The default is `pro`; choose a mode supported by the selected answer model.
 - `models.answer` sets the model used to answer captured questions. Default: `gpt-6-astra`.
 - `models.title_extraction` sets the model used to infer course and test names from the active window title. Default: `gpt-5.4-nano`.

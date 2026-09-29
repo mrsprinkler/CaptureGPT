@@ -1,9 +1,8 @@
 import sys
 import ctypes
-import json
 import markdown
 
-from app_config import SETTINGS_FILE, load_settings
+from app_config import load_settings, update_settings
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import (
@@ -14,27 +13,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QApplication, QWidget
 
-DEFAULT_HOTKEYS = {
-    "ocr_capture": "`",
-    "image_capture": "f10",
-    "configuration": "home",
-    "toggle_overlay": "insert",
-    "clear_answer": "esc",
-    "exit": "delete",
-    "cycle_effort": "f9",
-}
-_configured_hotkeys = load_settings().get("hotkeys", {})
-if not isinstance(_configured_hotkeys, dict):
-    _configured_hotkeys = {}
-HOTKEYS = {
-    action: (
-        _configured_hotkeys[action].strip()
-        if isinstance(_configured_hotkeys.get(action), str)
-        and _configured_hotkeys[action].strip()
-        else shortcut
-    )
-    for action, shortcut in DEFAULT_HOTKEYS.items()
-}
+HOTKEYS = load_settings()["hotkeys"]
 
 
 def _display_hotkey(action):
@@ -42,26 +21,37 @@ def _display_hotkey(action):
     return r"\`" if key == "`" else key.upper()
 
 
-instructions = "\n".join((
-    f"**{_display_hotkey('ocr_capture')}** - OCR-only screenshot",
-    f"**{_display_hotkey('configuration')}** - Configuration mode",
-    f"**{_display_hotkey('toggle_overlay')}** - Show/hide overlay",
-    f"**{_display_hotkey('clear_answer')}** - Clear boxes and answer",
-    f"**{_display_hotkey('exit')}** - Exit the program",
-    f"**{_display_hotkey('cycle_effort')}** - Change Reasoning Effort",
-    f"**{_display_hotkey('image_capture')}** - Screenshot + image to GPT",
-))
-starting_instructions = (
-    instructions
-    + "\nOnce the application is ready, you may drag and resize this window."
-)
+instructions = ""
+starting_instructions = ""
+
+
+def update_instructions(current_effort=None):
+    global instructions, starting_instructions
+
+    effort_label = "Change Reasoning Effort"
+    if current_effort:
+        effort_label += f" (current: **{current_effort}**)"
+
+    instructions = "\n".join((
+        f"**{_display_hotkey('ocr_capture')}** - OCR-only screenshot",
+        f"**{_display_hotkey('configuration')}** - Configuration mode",
+        f"**{_display_hotkey('toggle_overlay')}** - Show/hide overlay",
+        f"**{_display_hotkey('clear_answer')}** - Clear boxes and answer",
+        f"**{_display_hotkey('exit')}** - Exit the program",
+        f"**{_display_hotkey('cycle_effort')}** - {effort_label}",
+        f"**{_display_hotkey('image_capture')}** - Screenshot + image to GPT",
+    ))
+    starting_instructions = (
+        instructions
+        + "\nOnce the application is ready, you may drag and resize this window."
+    )
+
+
+update_instructions()
 
 # ================================================================
 # Settings
 # ================================================================
-
-SETTINGS_VERSION = 1
-
 
 class Overlay(QWidget):
     def __init__(self):
@@ -92,21 +82,19 @@ class Overlay(QWidget):
         self.answer_visible = False
         self.answer_color = "white"
 
-        # Default answer box geometry
-        self.answer_x = 0
-        self.answer_y = 0
-
-        self.answer_width = 450
-        self.answer_height = 250
-
-        self.answer_padding = 15
+        answer_defaults = load_settings()["answer_box"]
+        self.answer_x = answer_defaults["x"]
+        self.answer_y = answer_defaults["y"]
+        self.answer_width = answer_defaults["width"]
+        self.answer_height = answer_defaults["height"]
+        self.answer_padding = answer_defaults["padding"]
 
         # ========================================================
         # SET button
         # ========================================================
 
-        self.set_button_width = 100
-        self.set_button_height = 45
+        self.set_button_width = answer_defaults["set_button_width"]
+        self.set_button_height = answer_defaults["set_button_height"]
         self.set_button_visible = False
 
         # ========================================================
@@ -131,15 +119,15 @@ class Overlay(QWidget):
         # Minimum answer box size
         # ========================================================
 
-        self.min_answer_width = 250
-        self.min_answer_height = 80
+        self.min_answer_width = answer_defaults["min_width"]
+        self.min_answer_height = answer_defaults["min_height"]
 
         # ========================================================
         # Maximum answer box size
         # ========================================================
 
-        self.max_answer_width = 900
-        self.max_answer_height = 700
+        self.max_answer_width = answer_defaults["max_width"]
+        self.max_answer_height = answer_defaults["max_height"]
 
         # ========================================================
         # Settings
@@ -155,90 +143,28 @@ class Overlay(QWidget):
         """
         Load saved settings.
 
-        If the file does not exist or contains invalid data,
-        the default values from __init__ are used.
+        Missing settings are already supplied by app_config defaults.
         """
-
-        if not SETTINGS_FILE.exists():
-            print("No settings.json found. Using defaults.")
-            return
-
-        try:
-            with SETTINGS_FILE.open(
-                "r",
-                encoding="utf-8"
-            ) as file:
-                settings = json.load(file)
-
-        except (OSError, json.JSONDecodeError) as error:
-            print(
-                f"Could not load settings.json: {error}"
-            )
-            print("Using default settings.")
-            return
-
-        # ========================================================
-        # Check settings structure
-        # ========================================================
-
-        if not isinstance(settings, dict):
-            print("Invalid settings.json structure.")
-            print("Using default settings.")
-            return
-
-        version = settings.get(
-            "version",
-            1
-        )
-
-        if not isinstance(version, int):
-            print("Invalid settings version.")
-            print("Using default settings.")
-            return
-
-        # ========================================================
-        # Future migrations can go here
-        # ========================================================
-
-        if version > SETTINGS_VERSION:
-            print(
-                "settings.json was created by a newer version "
-                "of the application."
-            )
-            print("Using compatible default settings.")
-
-            return
-
-        # ========================================================
-        # Answer box settings
-        # ========================================================
-
-        answer_settings = settings.get(
-            "answer_box",
-            {}
-        )
-
-        if not isinstance(answer_settings, dict):
-            print("Invalid answer_box settings.")
-            return
+        settings = load_settings()
+        answer_settings = settings["answer_box"]
 
         self.answer_x = self.get_valid_number(
-            answer_settings.get("x"),
+            answer_settings["x"],
             self.answer_x
         )
 
         self.answer_y = self.get_valid_number(
-            answer_settings.get("y"),
+            answer_settings["y"],
             self.answer_y
         )
 
         self.answer_width = self.get_valid_number(
-            answer_settings.get("width"),
+            answer_settings["width"],
             self.answer_width
         )
 
         self.answer_height = self.get_valid_number(
-            answer_settings.get("height"),
+            answer_settings["height"],
             self.answer_height
         )
 
@@ -282,41 +208,18 @@ class Overlay(QWidget):
         Save only the settings owned by this class.
         Preserve every other setting already in settings.json.
         """
-
-        settings = {}
-
-        # Load the existing settings first
-        if SETTINGS_FILE.exists():
-            try:
-                with SETTINGS_FILE.open("r", encoding="utf-8") as file:
-                    loaded = json.load(file)
-
-                if isinstance(loaded, dict):
-                    settings = loaded
-
-            except (OSError, json.JSONDecodeError):
-                pass
-
-        # Update only our settings
-        settings["version"] = SETTINGS_VERSION
-
-        if not isinstance(settings.get("answer_box"), dict):
-            settings["answer_box"] = {}
-
-        settings["answer_box"].update({
-            "x": self.answer_x,
-            "y": self.answer_y,
-            "width": self.answer_width,
-            "height": self.answer_height,
-        })
-
         try:
-            with SETTINGS_FILE.open("w", encoding="utf-8") as file:
-                json.dump(settings, file, indent=4)
-
+            update_settings({
+                "answer_box": {
+                    "x": self.answer_x,
+                    "y": self.answer_y,
+                    "width": self.answer_width,
+                    "height": self.answer_height,
+                },
+            })
             print("Saved settings.json")
 
-        except OSError as error:
+        except (OSError, TypeError) as error:
             print(f"Could not save settings.json: {error}")
         # ============================================================
         # OCR boxes

@@ -17,28 +17,11 @@ client = OpenAI()
 
 SETTINGS = load_settings()
 
-MODEL_SETTINGS = SETTINGS.get("models", {})
-if not isinstance(MODEL_SETTINGS, dict):
-    MODEL_SETTINGS = {}
-
-
-def configured_string(value, default):
-    return value.strip() if isinstance(value, str) and value.strip() else default
-
-
-ANSWER_MODEL = configured_string(
-    MODEL_SETTINGS.get("answer"),
-    "gpt-6-astra",
-)
-TITLE_MODEL = configured_string(
-    MODEL_SETTINGS.get("title_extraction"),
-    "gpt-5.4-nano",
-)
-
-REASONING_SETTINGS = SETTINGS.get("reasoning", {})
-if not isinstance(REASONING_SETTINGS, dict):
-    REASONING_SETTINGS = {}
-REASONING_MODE = configured_string(REASONING_SETTINGS.get("mode"), "pro")
+MODEL_SETTINGS = SETTINGS["models"]
+ANSWER_MODEL = MODEL_SETTINGS["answer"]
+TITLE_MODEL = MODEL_SETTINGS["title_extraction"]
+REASONING_SETTINGS = SETTINGS["reasoning"]
+REASONING_MODE = REASONING_SETTINGS["mode"]
 
 
 # ============================================================
@@ -49,10 +32,7 @@ def image_to_data_url(image):
 
     buffer = io.BytesIO()
 
-    image_settings = load_settings().get("image", {})
-    quality = image_settings.get("jpeg_quality", 90) if isinstance(image_settings, dict) else 90
-    if not isinstance(quality, int) or isinstance(quality, bool):
-        quality = 90
+    quality = load_settings()["image"]["jpeg_quality"]
     quality = max(1, min(100, quality))
 
     pil_image.save(
@@ -73,10 +53,11 @@ def image_to_data_url(image):
 # ============================================================
 def get_test_info(title):
     started_at = time.perf_counter()
-    courses = load_settings().get("courses", [])
+    settings = load_settings()
+    courses = settings["courses"]
     response = client.responses.create(
     model=TITLE_MODEL,
-    reasoning={"effort": "none"},
+    reasoning={"effort": settings["reasoning"]["title_extraction_effort"]},
     input=f"""Extract Course, Test Name, and Short Test Name.
 
 Title: {title}
@@ -116,7 +97,9 @@ Example:
     return json.loads(response.output_text)
 
 
-def answer(ocr_results, title=None, image=None, effort="xhigh"):
+def answer(ocr_results, title=None, image=None, effort=None):
+    if effort is None:
+        effort = REASONING_SETTINGS["last_used"]
     started_at = time.perf_counter()
     with ThreadPoolExecutor(max_workers=2 if title else 1) as executor:
         answer_future = executor.submit(
@@ -137,7 +120,9 @@ def answer(ocr_results, title=None, image=None, effort="xhigh"):
     return result
 
 
-def _answer_request(ocr_results, image=None, effort="xhigh"):
+def _answer_request(ocr_results, image=None, effort=None):
+    if effort is None:
+        effort = REASONING_SETTINGS["last_used"]
     started_at = time.perf_counter()
     # return {"answers":[], "response":"""## Question 1: **A**. W\n## Question 2: **B**. X\n## Question 3: **B**. X"""}
 

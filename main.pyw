@@ -66,36 +66,14 @@ def get_window_title():
 
 SETTINGS = load_settings()
 
-OUTPUT_SETTINGS = SETTINGS["output"]
-SAVE_MARKDOWN = OUTPUT_SETTINGS["save_markdown"]
-SAVE_PDF = OUTPUT_SETTINGS["save_pdf"]
 
-output_directory_value = OUTPUT_SETTINGS["directory"]
-output_directory = Path(output_directory_value)
-if not output_directory.is_absolute():
-    output_directory = APP_DIR / output_directory
+def get_output_folder(settings):
+    output_directory = Path(settings["output"]["directory"])
+    if not output_directory.is_absolute():
+        output_directory = APP_DIR / output_directory
+    output_directory.mkdir(parents=True, exist_ok=True)
+    return output_directory
 
-screenshot_folder = output_directory
-screenshot_folder.mkdir(parents=True, exist_ok=True)
-
-
-def get_answers_folder():
-    folder = screenshot_folder
-
-    settings = load_settings()
-
-    answers_settings = settings.get("answers", {})
-    subdirectory = (
-        answers_settings.get("subdirectory", "")
-        if isinstance(answers_settings, dict)
-        else ""
-    )
-    if isinstance(subdirectory, str) and subdirectory.strip():
-        folder = screenshot_folder / subdirectory
-
-        folder.mkdir(parents=True, exist_ok=True)
-
-    return folder
 
 def add_frame_to_pdf(path: Path | str, frame):
     path = Path(path)
@@ -280,25 +258,28 @@ print("DPR:", dpr)
 
 printStatus("Initializing OCR...")
 
-OCR_SETTINGS = SETTINGS["ocr"]
-ocr_language = OCR_SETTINGS["language"]
-ocr_device = OCR_SETTINGS["device"]
-ocr_min_confidence = max(0.0, min(1.0, float(OCR_SETTINGS["min_confidence"])))
-ocr_region_gap = OCR_SETTINGS["region_gap"]
-ocr_region_padding = OCR_SETTINGS["region_padding"]
-ignored_text = {
-    text.strip()
-    for text in OCR_SETTINGS["ignored_text"]
-    if isinstance(text, str) and text.strip()
-}
+def get_ocr_engine_options(ocr_settings):
+    return (
+        ocr_settings["language"],
+        ocr_settings["device"],
+        ocr_settings["use_doc_orientation_classify"],
+        ocr_settings["use_doc_unwarping"],
+        ocr_settings["use_textline_orientation"],
+    )
 
-ocr = PaddleOCR(
-    lang=ocr_language,
-    device=ocr_device,
-    use_doc_orientation_classify=OCR_SETTINGS["use_doc_orientation_classify"],
-    use_doc_unwarping=OCR_SETTINGS["use_doc_unwarping"],
-    use_textline_orientation=OCR_SETTINGS["use_textline_orientation"],
-)
+
+def create_ocr_engine(ocr_settings):
+    return PaddleOCR(
+        lang=ocr_settings["language"],
+        device=ocr_settings["device"],
+        use_doc_orientation_classify=ocr_settings["use_doc_orientation_classify"],
+        use_doc_unwarping=ocr_settings["use_doc_unwarping"],
+        use_textline_orientation=ocr_settings["use_textline_orientation"],
+    )
+
+
+ocr = create_ocr_engine(SETTINGS["ocr"])
+ocr_engine_options = get_ocr_engine_options(SETTINGS["ocr"])
 
 
 # ============================================================
@@ -365,11 +346,12 @@ job_running = False
 def set_answer(txt):
     overlay.set_answer(
         txt,
-        effort_colors[efforts[effort_index]]
+        effort_colors.get(efforts[effort_index], "white")
     )
 
-def load_title_cache():
-    cache = load_settings()["title_cache"]
+def load_title_cache(settings=None):
+    settings = settings or load_settings()
+    cache = settings["title_cache"]
     return {
         title: info
         for title, info in cache.items()
@@ -384,9 +366,9 @@ def save_title_cache(title_cache):
         print(f"Failed to save title cache: {e}")
 
 
-def load_test_info_override():
+def load_test_info_override(settings=None):
     """Load non-empty manual course/test fields from the shared settings file."""
-    settings = load_settings()
+    settings = settings or load_settings()
     test_info = settings["test_info"]
 
     return {
@@ -406,6 +388,9 @@ def background_worker():
     Runs OCR/GPT jobs away from the Qt main thread.
     """
 
+    global SETTINGS, OCR_SETTINGS, ocr, ocr_engine_options
+    global efforts, effort_index, effort_colors, title_cache
+
     while True:
 
         job = job_queue.get()
@@ -417,6 +402,31 @@ def background_worker():
 
         try:
 
+            # Use one settings snapshot for every part of this request.
+            SETTINGS = load_settings()
+            OCR_SETTINGS = SETTINGS["ocr"]
+            current_engine_options = get_ocr_engine_options(OCR_SETTINGS)
+            if current_engine_options != ocr_engine_options:
+                print("OCR engine settings changed; reloading PaddleOCR...")
+                ocr = create_ocr_engine(OCR_SETTINGS)
+                ocr_engine_options = current_engine_options
+
+            reasoning_settings = SETTINGS["reasoning"]
+            efforts = list(dict.fromkeys(
+                item for item in reasoning_settings["efforts"]
+                if isinstance(item, str) and item.strip()
+            ))
+            if not efforts:
+                efforts = [reasoning_settings["default"]]
+            selected_effort = reasoning_settings["last_used"]
+            if selected_effort not in efforts:
+                selected_effort = reasoning_settings["default"]
+            if selected_effort not in efforts:
+                selected_effort = efforts[0]
+            effort_index = efforts.index(selected_effort)
+            effort_colors = SETTINGS["effort_colors"]
+            title_cache = load_title_cache(SETTINGS)
+
             print()
             print("========================================")
             print("BACKGROUND OCR JOB")
@@ -426,7 +436,7 @@ def background_worker():
             # OCR
             # ------------------------------------------------
 
-            boxes, ocr_results, start_x, end_x = run_ocr(frame)
+            boxes, ocr_results, start_x, end_x = run_ocr(frame, OCR_SETTINGS)
 
             # ------------------------------------------------
             # Keep only OCR inside the detected question region
@@ -467,7 +477,7 @@ def background_worker():
 
             title = get_window_title()
             cached_test_info = title_cache.get(title)
-            manual_test_info = load_test_info_override()
+            manual_test_info = load_test_info_override(SETTINGS)
             test_info = {
                 **(cached_test_info or {}),
                 **manual_test_info,
@@ -498,7 +508,8 @@ def background_worker():
                     ocr_results,
                     title=title_for_gpt,
                     image=cropped_frame,
-                    effort=efforts[effort_index],
+                    effort=selected_effort,
+                    settings=SETTINGS,
                 )
 
             else:
@@ -508,7 +519,8 @@ def background_worker():
                 response = gpt.answer(
                     ocr_results,
                     title=title_for_gpt,
-                    effort=efforts[effort_index],
+                    effort=selected_effort,
+                    settings=SETTINGS,
                 )
 
             print("GPT response received.")
@@ -552,6 +564,7 @@ def background_worker():
                     boxes,
                     ocr_results,
                     cropped_frame,
+                    SETTINGS,
                 )
             )
 
@@ -589,9 +602,18 @@ worker_thread.start()
 # OCR
 # ============================================================
 
-def run_ocr(frame):
+def run_ocr(frame, ocr_settings):
 
     result = ocr.predict(frame)
+    min_confidence = max(
+        0.0,
+        min(1.0, float(ocr_settings["min_confidence"])),
+    )
+    ignored_text = {
+        text.strip()
+        for text in ocr_settings["ignored_text"]
+        if isinstance(text, str) and text.strip()
+    }
 
     boxes = []
     ocr_results = []
@@ -608,7 +630,7 @@ def run_ocr(frame):
             detected_boxes,
         ):
 
-            if score < ocr_min_confidence:
+            if score < min_confidence:
                 continue
 
             text = text.strip()
@@ -643,7 +665,7 @@ def run_ocr(frame):
     groups = []
     current_group = [intervals[0]]
 
-    gap = ocr_region_gap
+    gap = ocr_settings["region_gap"]
 
     for interval in intervals[1:]:
 
@@ -726,7 +748,7 @@ def run_ocr(frame):
 
     # Add padding
 
-    padding = ocr_region_padding
+    padding = ocr_settings["region_padding"]
 
     start_x = max(
         0,
@@ -758,6 +780,7 @@ def process_response(
     boxes,
     ocr_results,
     frame,
+    settings,
 ):
 
     formatted_response: str = response["response"]
@@ -766,7 +789,10 @@ def process_response(
 
     answers = response["answers"]
 
-    path = screenshot_folder
+    output_settings = settings["output"]
+    path = get_output_folder(settings)
+    save_markdown = output_settings["save_markdown"]
+    save_pdf = output_settings["save_pdf"]
 
     test_name = "answers"
     short_test_name = "answers"
@@ -782,14 +808,14 @@ def process_response(
         short_test_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '', short_test_name).strip().rstrip('.')
         path = (path / course)
 
-    if SAVE_MARKDOWN or SAVE_PDF:
+    if save_markdown or save_pdf:
         path.mkdir(parents=True, exist_ok=True)
 
     # --------------------------------------------------------
     # Markdown
     # --------------------------------------------------------
 
-    if SAVE_MARKDOWN:
+    if save_markdown:
         with open(
             path / f"{short_test_name}.md",
             "a+",
@@ -863,7 +889,7 @@ def process_response(
     # PDF
     # --------------------------------------------------------
 
-    if SAVE_PDF:
+    if save_pdf:
         pdf_path = path / f"{short_test_name}.pdf"
 
         add_frame_to_pdf(
@@ -1127,9 +1153,6 @@ keyboard.add_hotkey(
 # Reasoning effort
 # ============================================================
 
-efforts_len = len(efforts)
-
-
 def change_effort():
 
     print("RIGHT CLICK")
@@ -1138,7 +1161,7 @@ def change_effort():
 
     effort_index += 1
 
-    if effort_index >= efforts_len:
+    if effort_index >= len(efforts):
         effort_index = 0
 
     current_effort = efforts[effort_index]
@@ -1216,6 +1239,7 @@ def check_background_results():
                     boxes,
                     ocr_results,
                     cropped_frame,
+                    request_settings,
                 ) = result
 
                 job_running = False
@@ -1229,6 +1253,7 @@ def check_background_results():
                     boxes,
                     ocr_results,
                     cropped_frame,
+                    request_settings,
                 )
 
             # ------------------------------------------------
@@ -1471,7 +1496,7 @@ def start_ready_timer():
         "Click SET when you're done."
         + f"\nReasoning Effort: "
         f"<strong><span style='color: "
-        f"{effort_colors[efforts[effort_index]]}'>"
+        f"{effort_colors.get(efforts[effort_index], 'white')}'>"
         f"{efforts[effort_index]}"
         f"</span></strong>"
     )

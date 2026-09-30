@@ -83,7 +83,7 @@ DEFAULT_SETTINGS = {
         "save_markdown": True,
         "save_pdf": True,
     },
-    "courses": [],
+    "courses": ["English", "Math", "Science", "History"],
     "test_info": {"course": None, "test_name": None, "short_test_name": None},
     "title_cache": {},
 }
@@ -138,9 +138,28 @@ def _apply_updates(settings: dict, updates: dict) -> None:
 
 
 def load_settings() -> dict:
-    """Return defaults recursively overlaid by settings.json values."""
+    """Merge settings.json over defaults and persist any missing defaults."""
     with _SETTINGS_LOCK:
-        return _merge_settings(DEFAULT_SETTINGS, _read_user_settings())
+        user_settings = _read_user_settings()
+        merged_settings = _merge_settings(DEFAULT_SETTINGS, user_settings)
+        if merged_settings != user_settings:
+            try:
+                _write_settings(merged_settings)
+            except OSError as error:
+                print(f"Could not update settings.json with defaults: {error}")
+        return merged_settings
+
+
+def _write_settings(settings: dict) -> None:
+    """Atomically write a complete settings dictionary to the shared file."""
+    temporary_file = SETTINGS_FILE.with_name(SETTINGS_FILE.name + ".tmp")
+    try:
+        with temporary_file.open("w", encoding="utf-8") as file:
+            json.dump(settings, file, indent=4, ensure_ascii=False)
+        temporary_file.replace(SETTINGS_FILE)
+    finally:
+        if temporary_file.exists():
+            temporary_file.unlink()
 
 
 def update_settings(updates: dict) -> None:
@@ -152,11 +171,9 @@ def update_settings(updates: dict) -> None:
         settings = _read_user_settings()
         _apply_updates(settings, updates)
 
-        temporary_file = SETTINGS_FILE.with_name(SETTINGS_FILE.name + ".tmp")
-        try:
-            with temporary_file.open("w", encoding="utf-8") as file:
-                json.dump(settings, file, indent=4, ensure_ascii=False)
-            temporary_file.replace(SETTINGS_FILE)
-        finally:
-            if temporary_file.exists():
-                temporary_file.unlink()
+        _write_settings(settings)
+
+
+if __name__ == "__main__":
+    settings = load_settings()
+    print(f"Updated {SETTINGS_FILE} with merged application settings.")

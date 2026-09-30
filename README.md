@@ -1,6 +1,6 @@
 # CaptureGPT
 
-[![Download Latest Release](https://img.shields.io/badge/Download-Latest%20Release-2ea44f?style=for-the-badge&logo=github)](https://github.com/mrsprinkler/CaptureGPT/releases/latest)
+[![Download Latest Release](https://img.shields.io/badge/Download-Latest%20Release-2ea44f?style=for-the-badge&logo=github)](https://github.com/mrsprinkler/CaptureGPT/releases/download/v0.1.0/CaptureGPT.7z)
 
 CaptureGPT is a Windows desktop overlay that captures the area behind it, reads on-screen questions, and sends them to the OpenAI API. Use OCR text mode for lower token use, or image mode when the screenshot's visual details matter.
 
@@ -8,22 +8,22 @@ CaptureGPT is a Windows desktop overlay that captures the area behind it, reads 
 
 - **OCR-only capture:** runs PaddleOCR on the captured area and sends the extracted text to the model.
 - **Screenshot + image capture:** sends both OCR text and the image. This uses more tokens than OCR-only mode.
-- **Answer overlay:** displays the model's response and highlights the OCR text associated with answers.
+- **Answer overlay:** displays the model's response and draws a red box around the on-screen text GPT identifies as the correct answer.
 - **Test organization:** identifies the course and test from the active window title and course list, or uses manual `test_info` from `settings.json`. It saves responses as Markdown and appends captures to a PDF under `Answers/<course>/`.
 - **Reasoning effort control:** change the model's reasoning effort while the app is running.
 - **Capture exclusion:** asks Windows to exclude the CaptureGPT overlay itself from screen capture and recording. This does not hide the underlying screen from recording software.
 
 ## Keyboard shortcuts
 
-| Key | Action |
-| --- | --- |
-| <kbd>`</kbd> | Capture using OCR text only |
-| <kbd>F10</kbd> | Capture and send the screenshot image with OCR text |
-| <kbd>Home</kbd> | Enter configuration mode |
-| <kbd>Insert</kbd> | Show or hide the overlay |
-| <kbd>Escape</kbd> | Clear the answer and OCR boxes |
-| <kbd>F9</kbd> | Change reasoning effort |
-| <kbd>Delete</kbd> | Exit CaptureGPT |
+| Key               | Action                                              |
+| ----------------- | --------------------------------------------------- |
+| <kbd>`</kbd>      | Capture using OCR text only                         |
+| <kbd>F10</kbd>    | Capture and send the screenshot image with OCR text |
+| <kbd>Home</kbd>   | Enter configuration mode                            |
+| <kbd>Insert</kbd> | Show or hide the overlay                            |
+| <kbd>Escape</kbd> | Clear the answer and OCR boxes                      |
+| <kbd>F9</kbd>     | Change reasoning effort                             |
+| <kbd>Delete</kbd> | Exit CaptureGPT                                     |
 
 Once the overlay is ready, drag and resize it over the area you want to capture, then click **SET**. The overlay area determines the capture region.
 
@@ -31,13 +31,13 @@ Once the overlay is ready, drag and resize it over the area you want to capture,
 
 The default colors are:
 
-| Effort | Color |
-| --- | --- |
-| `low` | Green (`#4CAF50`) |
+| Effort   | Color                   |
+| -------- | ----------------------- |
+| `low`    | Green (`#4CAF50`)       |
 | `medium` | Light green (`#8BC34A`) |
-| `high` | Yellow (`#FFC107`) |
-| `xhigh` | Orange (`#FF9800`) |
-| `max` | Red (`#F44336`) |
+| `high`   | Yellow (`#FFC107`)      |
+| `xhigh`  | Orange (`#FF9800`)      |
+| `max`    | Red (`#F44336`)         |
 
 To change a color, edit the top-level `effort_colors` object in `settings.json`. Use CSS hex colors, keep the effort names unchanged, and restart CaptureGPT for changes to take effect:
 
@@ -59,18 +59,24 @@ To change a color, edit the top-level `effort_colors` object in `settings.json`.
 - An OpenAI API key
 - Internet access for OpenAI requests and the initial OCR model download
 
+## Download a release
+
+You do not need to build CaptureGPT from source. [Download the latest release ZIP](https://github.com/mrsprinkler/CaptureGPT/releases/latest), extract it, then run `CaptureGPT.exe` from the extracted folder. Keep the extracted files together.
+
 ## Run from source
 
 1. Clone or download this repository.
 2. Run [`setup.bat`](setup.bat) to install dependencies with `uv`.
 3. Run [`run.bat`](run.bat) to start the app.
-4. On first launch, CaptureGPT checks for an API key in the environment, `.env`, and clipboard. If none is found, it opens the OpenAI API keys page and watches for a copied key. You can also type the key in the prompt.
 
-The key is stored in `.env` beside the source app. Keep this file private; it is ignored by Git.
+```powershell
+git clone https://github.com/mrsprinkler/CaptureGPT.git
+cd CaptureGPT
+.\setup.bat
+.\run.bat
+```
 
-## Download a release
-
-You do not need to build CaptureGPT from source. [Download the latest release ZIP](https://github.com/mrsprinkler/CaptureGPT/releases/latest), extract it, then run `CaptureGPT.exe` from the extracted folder. Keep the extracted files together.
+On first launch, CaptureGPT checks for an API key in the environment, `.env`, and clipboard. If none is found, it opens the OpenAI API keys page and watches for a copied key. You can also type the key in the prompt. The key is stored in `.env` beside the source app; keep this file private because it is ignored by Git.
 
 ## Build a standalone app
 
@@ -101,14 +107,14 @@ Edit `settings.json` beside `CaptureGPT.exe` (or in the project folder when runn
 
 The `ocr` object controls OCR initialization and question-region detection:
 
-| Setting | Default | What it controls |
-| --- | --- | --- |
-| `language` | `en` | PaddleOCR language code |
-| `device` | `gpu:0` | Paddle device, such as `gpu:0` or `cpu` |
-| `min_confidence` | `0.7` | Ignore OCR detections below this score (0 to 1) |
-| `region_gap` | `150` | Maximum horizontal gap, in pixels, for grouping detected text |
-| `region_padding` | `20` | Pixels added around the detected question area |
-| `ignored_text` | Browser/course navigation labels | Exact OCR text to omit; supplying a list replaces the defaults |
+| Setting          | Default                          | What it controls                                               |
+| ---------------- | -------------------------------- | -------------------------------------------------------------- |
+| `language`       | `en`                             | PaddleOCR language code                                        |
+| `device`         | `gpu:0`                          | Paddle device, such as `gpu:0` or `cpu`                        |
+| `min_confidence` | `0.7`                            | Ignore OCR detections below this score (0 to 1)                |
+| `region_gap`     | `150`                            | Maximum horizontal gap, in pixels, for grouping detected text  |
+| `region_padding` | `20`                             | Pixels added around the detected question area                 |
+| `ignored_text`   | Browser/course navigation labels | Exact OCR text to omit; supplying a list replaces the defaults |
 
 ### Reasoning and image settings
 
@@ -125,15 +131,15 @@ The `ocr` object controls OCR initialization and question-region detection:
 
 The top-level `hotkeys` object maps actions to keys recognized by the `keyboard` package:
 
-| Setting | Default action |
-| --- | --- |
-| `ocr_capture` | <kbd>`</kbd> OCR-only capture |
-| `image_capture` | <kbd>F10</kbd> screenshot + image capture |
-| `configuration` | <kbd>Home</kbd> configuration mode |
-| `toggle_overlay` | <kbd>Insert</kbd> show/hide overlay |
-| `clear_answer` | <kbd>Esc</kbd> clear answer and boxes |
-| `exit` | <kbd>Delete</kbd> exit |
-| `cycle_effort` | <kbd>F9</kbd> change reasoning effort |
+| Setting          | Default action                            |
+| ---------------- | ----------------------------------------- |
+| `ocr_capture`    | <kbd>`</kbd> OCR-only capture             |
+| `image_capture`  | <kbd>F10</kbd> screenshot + image capture |
+| `configuration`  | <kbd>Home</kbd> configuration mode        |
+| `toggle_overlay` | <kbd>Insert</kbd> show/hide overlay       |
+| `clear_answer`   | <kbd>Esc</kbd> clear answer and boxes     |
+| `exit`           | <kbd>Delete</kbd> exit                    |
+| `cycle_effort`   | <kbd>F9</kbd> change reasoning effort     |
 
 For example, set `ocr_capture` to `ctrl+shift+o` to use a key combination.
 
@@ -154,11 +160,7 @@ There are two ways to provide course and test information in `settings.json`:
    ```json
    {
      "version": 1,
-     "courses": [
-       "AP Computer Science",
-       "AP Precalculus",
-       "English 4"
-     ]
+     "courses": ["AP Computer Science", "AP Precalculus", "English 4"]
    }
    ```
 
